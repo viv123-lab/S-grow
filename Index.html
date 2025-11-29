@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>S-Grow: Jungle Snake</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f1a15;
+            --screen-bg: #1a2c24;
+            --bezel: #050a08;
+            --accent: #8bac0f;
+            --text: #e0f8cf;
+            --crt-scanline: rgba(18, 16, 16, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text);
+            font-family: 'Press Start 2P', cursive;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        /* Game Container (The "Console") */
+        #game-console {
+            position: relative;
+            background-color: var(--bezel);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* The Screen Area */
+        #screen-wrapper {
+            position: relative;
+            border: 4px solid #306230;
+            border-radius: 4px;
+            overflow: hidden;
+            background-color: var(--screen-bg);
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.6);
+        }
+
+        canvas {
+            display: block;
+            image-rendering: pixelated; /* Crucial for retro look */
+        }
+
+        /* CRT Overlay Effect */
+        #screen-wrapper::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+        }
+
+        /* UI Overlay (Menu, Game Over, HUD) */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            pointer-events: none; /* Let clicks pass through to canvas usually */
+        }
+
+        .screen-active {
+            pointer-events: auto !important;
+            background-color: rgba(0, 0, 0, 0.85);
+        }
+
+        h1 {
+            font-size: 24px;
+            color: #8bac0f;
+            text-shadow: 2px 2px #0f380f;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        p {
+            font-size: 10px;
+            color: #9bbc0f;
+            margin-bottom: 20px;
+            line-height: 1.6;
+            max-width: 80%;
+        }
+
+        .btn {
+            background: #8bac0f;
+            color: #0f380f;
+            border: 2px solid #0f380f;
+            padding: 10px 15px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 10px;
+            cursor: pointer;
+            margin: 5px;
+            text-transform: uppercase;
+            box-shadow: inset -2px -2px rgba(0,0,0,0.3);
+        }
+
+        .btn:hover {
+            background: #9bbc0f;
+        }
+
+        .btn:active {
+            box-shadow: inset 2px 2px rgba(0,0,0,0.3);
+        }
+
+        .char-select {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .snake-card {
+            border: 2px solid #306230;
+            padding: 10px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        
+        .snake-card:hover {
+            border-color: #8bac0f;
+            transform: scale(1.05);
+        }
+
+        .snake-preview {
+            width: 50px;
+            height: 50px;
+            margin: 0 auto 10px;
+            image-rendering: pixelated;
+        }
+
+        /* HUD */
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            box-sizing: border-box;
+            z-index: 5;
+            display: none; /* Hidden on menu */
+        }
+        
+        .hud-text {
+            font-size: 10px;
+            color: rgba(255,255,255,0.8);
+            text-shadow: 1px 1px #000;
+        }
+
+        /* Controls */
+        #controls {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 60px 60px 60px;
+            grid-template-rows: 60px 60px;
+            gap: 5px;
+        }
+
+        .d-btn {
+            background: #333;
+            border-radius: 5px;
+            border: none;
+            box-shadow: 0 4px 0 #111;
+            color: #ccc;
+            font-size: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            touch-action: manipulation; /* Prevents zooming/scrolling on double tap */
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .d-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #111;
+        }
+
+        #btn-up { grid-column: 2; grid-row: 1; }
+        #btn-left { grid-column: 1; grid-row: 2; }
+        #btn-down { grid-column: 2; grid-row: 2; }
+        #btn-right { grid-column: 3; grid-row: 2; }
+
+        .hidden { display: none !important; }
+
+        /* Level Notification */
+        #level-toast {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            border: 2px solid #8bac0f;
+            color: #8bac0f;
+            padding: 20px;
+            z-index: 20;
+            display: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-console">
+        <div id="screen-wrapper">
+            <canvas id="gameCanvas" width="300" height="300"></canvas>
+            
+            <div id="hud">
+                <span class="hud-text">LVL: <span id="lvl-disp">1</span></span>
+                <span class="hud-text">SCORE: <span id="score-disp">0</span></span>
+            </div>
+
+            <div id="level-toast">
+                <h2 id="toast-title">LEVEL UP!</h2>
+                <p>Welcome to the Jungle</p>
+            </div>
+
+            <div id="ui-layer" class="screen-active">
+                <!-- Main Menu -->
+                <div id="menu-screen">
+                    <h1>S-GROW</h1>
+                    <p>Select your Snake</p>
+                    
+                    <div class="char-select">
+                        <div class="snake-card" onclick="startGame('green')">
+                            <div class="snake-preview" style="background: #4caf50; box-shadow: 2px 2px #1b5e20;"></div>
+                            <div style="font-size: 8px;">Garden<br>Green</div>
+                        </div>
+                        <div class="snake-card" onclick="startGame('yellow')">
+                            <div class="snake-preview" style="background: #ffeb3b; box-shadow: 2px 2px #fbc02d;"></div>
+                            <div style="font-size: 8px;">Yellow<br>Bellied</div>
+                        </div>
+                    </div>
+                    
+                    <p style="font-size: 8px; color: #888; margin-top: 10px;">
+                        Eat Fruit to spawn Rare Blueberries.<br>
+                        Eat Blueberries to Level Up!
+                    </p>
+                </div>
+
+                <!-- Game Over -->
+                <div id="game-over-screen" class="hidden">
+                    <h1 style="color: #d32f2f;">GAME OVER</h1>
+                    <p>Score: <span id="final-score">0</span></p>
+                    <p>Level: <span id="final-level">1</span></p>
+                    <button class="btn" onclick="showMenu()">Main Menu</button>
+                    <button class="btn" onclick="retry()">Try Again</button>
+                </div>
+
+                <!-- Victory -->
+                <div id="victory-screen" class="hidden">
+                    <h1 style="color: gold;">YOU WIN!</h1>
+                    <p>You conquered the Jungle!</p>
+                    <p>Final Score: <span id="win-score">0</span></p>
+                    <button class="btn" onclick="showMenu()">Play Again</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="controls">
+            <button class="d-btn" id="btn-left">←</button>
+            <button class="d-btn" id="btn-up">↑</button>
+            <button class="d-btn" id="btn-down">↓</button>
+            <button class="d-btn" id="btn-right">→</button>
+        </div>
+        <div style="margin-top: 10px; font-size: 8px; color: #555;">Use Arrow Keys or On-Screen Buttons</div>
+    </div>
+
+<script>
+/**
+ * S-GROW: 10-bit Snake Game Logic
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Game Constants
+const GRID_SIZE = 15; // Size of one tile in pixels
+const TILE_COUNT = canvas.width / GRID_SIZE;
+
+// Game State
+let gameLoop;
+let snake = [];
+let food = { x: 0, y: 0 };
+let blueberry = null; // Object {x, y} or null
+let velocity = { x: 0, y: 0 };
+let score = 0;
+let level = 1;
+let fruitsEatenInLevel = 0;
+let isGameRunning = false;
+let isPaused = false;
+let snakeType = 'green'; // 'green' or 'yellow'
+
+// Level Configuration
+const LEVELS = [
+    { id: 1, name: "The Garden", color: "#1a2c24", speed: 150, reqFruit: 4 },
+    { id: 2, name: "Deep Jungle", color: "#0d2b2a", speed: 120, reqFruit: 6 },
+    { id: 3, name: "Ancient Ruins", color: "#2b200d", speed: 100, reqFruit: 8 },
+    { id: 4, name: "Night Shade", color: "#1a0d2b", speed: 85, reqFruit: 10 },
+    { id: 5, name: "Snake King's Lair", color: "#2b0d0d", speed: 70, reqFruit: 999 } // Final endless level
+];
+
+// Audio Context
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioContext();
+
+function playSound(type) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    if (type === 'eat') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    } else if (type === 'levelUp') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(800, audioCtx.currentTime + 0.2);
+        osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.4);
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.6);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.6);
+    } else if (type === 'die') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(50, audioCtx.currentTime + 0.3);
+        gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+    }
+}
+
+// UI Elements
+const uiLayer = document.getElementById('ui-layer');
+const menuScreen = document.getElementById('menu-screen');
+const gameOverScreen = document.getElementById('game-over-screen');
+const victoryScreen = document.getElementById('victory-screen');
+const hud = document.getElementById('hud');
+const lvlDisp = document.getElementById('lvl-disp');
+const scoreDisp = document.getElementById('score-disp');
+const levelToast = document.getElementById('level-toast');
+
+// Input Handling
+let lastInputTime = 0;
+
+function handleInput(x, y) {
+    const now = Date.now();
+    if (now - lastInputTime < 50) return; // Debounce slightly
+    
+    // Prevent 180 degree turns
+    if (velocity.x !== 0 && x === -velocity.x) return;
+    if (velocity.y !== 0 && y === -velocity.y) return;
+    
+    velocity = { x, y };
+    lastInputTime = now;
+}
+
+document.addEventListener('keydown', (e) => {
+    if (!isGameRunning) return;
+    switch(e.key) {
+        case 'ArrowUp': handleInput(0, -1); break;
+        case 'ArrowDown': handleInput(0, 1); break;
+        case 'ArrowLeft': handleInput(-1, 0); break;
+        case 'ArrowRight': handleInput(1, 0); break;
+    }
+});
+
+// Mobile Controls
+document.getElementById('btn-up').addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(0, -1); });
+document.getElementById('btn-down').addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(0, 1); });
+document.getElementById('btn-left').addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(-1, 0); });
+document.getElementById('btn-right').addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(1, 0); });
+
+// Mouse support for desktop testing
+document.getElementById('btn-up').addEventListener('mousedown', () => handleInput(0, -1));
+document.getElementById('btn-down').addEventListener('mousedown', () => handleInput(0, 1));
+document.getElementById('btn-left').addEventListener('mousedown', () => handleInput(-1, 0));
+document.getElementById('btn-right').addEventListener('mousedown', () => handleInput(1, 0));
+
+
+function showMenu() {
+    isGameRunning = false;
+    uiLayer.classList.add('screen-active');
+    menuScreen.classList.remove('hidden');
+    gameOverScreen.classList.add('hidden');
+    victoryScreen.classList.add('hidden');
+    hud.style.display = 'none';
+    
+    // Draw background scene
+    ctx.fillStyle = "#0f1a15";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function retry() {
+    startGame(snakeType);
+}
+
+function startGame(type) {
+    snakeType = type;
+    menuScreen.classList.add('hidden');
+    gameOverScreen.classList.add('hidden');
+    victoryScreen.classList.add('hidden');
+    uiLayer.classList.remove('screen-active'); // Enable canvas interaction
+    hud.style.display = 'flex';
+    
+    // Reset Stats
+    snake = [
+        { x: 10, y: 10 },
+        { x: 10, y: 11 },
+        { x: 10, y: 12 }
+    ];
+    velocity = { x: 0, y: -1 };
+    score = 0;
+    level = 1;
+    fruitsEatenInLevel = 0;
+    scoreDisp.innerText = score;
+    lvlDisp.innerText = level;
+    blueberry = null;
+    
+    spawnFood();
+    
+    isGameRunning = true;
+    
+    // Adjust logic based on snake choice
+    // Yellow is slightly faster but starts with higher score potential? 
+    // For simplicity, just cosmetic in this implementation, but we set style in draw().
+
+    if (gameLoop) clearInterval(gameLoop);
+    gameLoop = setInterval(update, LEVELS[0].speed);
+}
+
+function spawnFood() {
+    food = {
+        x: Math.floor(Math.random() * TILE_COUNT),
+        y: Math.floor(Math.random() * TILE_COUNT)
+    };
+    // Check if spawning on snake
+    for(let part of snake) {
+        if(part.x === food.x && part.y === food.y) spawnFood();
+    }
+    // Check if on blueberry
+    if(blueberry && food.x === blueberry.x && food.y === blueberry.y) spawnFood();
+}
+
+function spawnBlueberry() {
+    blueberry = {
+        x: Math.floor(Math.random() * TILE_COUNT),
+        y: Math.floor(Math.random() * TILE_COUNT)
+    };
+    // Don't spawn on snake or food
+    for(let part of snake) {
+        if(part.x === blueberry.x && part.y === blueberry.y) spawnBlueberry();
+    }
+    if(blueberry.x === food.x && blueberry.y === food.y) spawnBlueberry();
+}
+
+function update() {
+    if (isPaused) return;
+
+    const head = { x: snake[0].x + velocity.x, y: snake[0].y + velocity.y };
+
+    // Wall Collision
+    if (head.x < 0 || head.x >= TILE_COUNT || head.y < 0 || head.y >= TILE_COUNT) {
+        gameOver();
+        return;
+    }
+
+    // Self Collision
+    for (let part of snake) {
+        if (head.x === part.x && head.y === part.y) {
+            gameOver();
+            return;
+        }
+    }
+
+    snake.unshift(head);
+
+    let ateFood = false;
+
+    // Check Regular Food
+    if (head.x === food.x && head.y === food.y) {
+        score += 10;
+        fruitsEatenInLevel++;
+        playSound('eat');
+        spawnFood();
+        ateFood = true;
+
+        // Condition to spawn blueberry
+        const currentLvlConfig = LEVELS.find(l => l.id === level);
+        if (currentLvlConfig && fruitsEatenInLevel === currentLvlConfig.reqFruit && !blueberry) {
+            spawnBlueberry();
+        }
+    }
+
+    // Check Blueberry
+    if (blueberry && head.x === blueberry.x && head.y === blueberry.y) {
+        score += 50;
+        playSound('levelUp');
+        blueberry = null;
+        ateFood = true; // Grow
+        advanceLevel();
+    }
+
+    if (!ateFood) {
+        snake.pop();
+    }
+
+    scoreDisp.innerText = score;
+    draw();
+}
+
+function advanceLevel() {
+    if (level >= 5) {
+        // Just faster, no new level ID
+        // Or trigger Win if we want a definitive end after level 5
+        victory();
+        return;
+    }
+
+    level++;
+    fruitsEatenInLevel = 0;
+    lvlDisp.innerText = level;
+
+    const config = LEVELS.find(l => l.id === level);
+    
+    // Show Toast
+    levelToast.style.display = 'block';
+    document.getElementById('toast-title').innerText = `LEVEL ${level}`;
+    levelToast.querySelector('p').innerText = config.name;
+    
+    isPaused = true;
+    setTimeout(() => {
+        levelToast.style.display = 'none';
+        isPaused = false;
+        
+        // Speed up
+        clearInterval(gameLoop);
+        gameLoop = setInterval(update, config.speed);
+    }, 2000);
+}
+
+function draw() {
+    const config = LEVELS.find(l => l.id === level) || LEVELS[4];
+    
+    // Background
+    ctx.fillStyle = config.color;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Grid (Subtle)
+    ctx.strokeStyle = "rgba(0,0,0,0.1)";
+    ctx.beginPath();
+    for(let i=0; i<TILE_COUNT; i++) {
+        ctx.moveTo(i*GRID_SIZE, 0);
+        ctx.lineTo(i*GRID_SIZE, canvas.height);
+        ctx.moveTo(0, i*GRID_SIZE);
+        ctx.lineTo(canvas.width, i*GRID_SIZE);
+    }
+    ctx.stroke();
+
+    // Food (Apple)
+    ctx.fillStyle = "#ff4040";
+    ctx.fillRect(food.x * GRID_SIZE + 2, food.y * GRID_SIZE + 2, GRID_SIZE - 4, GRID_SIZE - 4);
+    // Apple Stem
+    ctx.fillStyle = "#8bac0f";
+    ctx.fillRect(food.x * GRID_SIZE + 5, food.y * GRID_SIZE, 4, 3);
+
+    // Blueberry (Rare)
+    if (blueberry) {
+        ctx.fillStyle = "#4040ff";
+        // Draw circle-ish pixel
+        let bx = blueberry.x * GRID_SIZE;
+        let by = blueberry.y * GRID_SIZE;
+        ctx.fillRect(bx + 3, by + 3, GRID_SIZE - 6, GRID_SIZE - 6);
+        ctx.fillStyle = "#fff"; // Shine
+        ctx.fillRect(bx + 4, by + 4, 2, 2);
+    }
+
+    // Snake
+    snake.forEach((part, index) => {
+        // Color based on choice
+        if (snakeType === 'green') {
+            ctx.fillStyle = index === 0 ? "#2e7d32" : (index % 2 === 0 ? "#4caf50" : "#66bb6a");
+        } else {
+            ctx.fillStyle = index === 0 ? "#fbc02d" : (index % 2 === 0 ? "#ffeb3b" : "#fff176");
+        }
+
+        ctx.fillRect(part.x * GRID_SIZE, part.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+
+        // Eyes on Head
+        if (index === 0) {
+            ctx.fillStyle = "black";
+            // Determine direction to place eyes
+            let ex = part.x * GRID_SIZE;
+            let ey = part.y * GRID_SIZE;
+            
+            // Generic eye placement (top left/top right relative to head)
+            ctx.fillRect(ex + 2, ey + 2, 3, 3);
+            ctx.fillRect(ex + 10, ey + 2, 3, 3);
+        }
+        
+        // Pixel border for body segments
+        ctx.strokeStyle = "rgba(0,0,0,0.2)";
+        ctx.strokeRect(part.x * GRID_SIZE, part.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+    });
+}
+
+function gameOver() {
+    isGameRunning = false;
+    clearInterval(gameLoop);
+    playSound('die');
+    
+    document.getElementById('final-score').innerText = score;
+    document.getElementById('final-level').innerText = level;
+    
+    uiLayer.classList.add('screen-active');
+    gameOverScreen.classList.remove('hidden');
+}
+
+function victory() {
+    isGameRunning = false;
+    clearInterval(gameLoop);
+    playSound('levelUp');
+    
+    document.getElementById('win-score').innerText = score;
+    
+    uiLayer.classList.add('screen-active');
+    victoryScreen.classList.remove('hidden');
+}
+
+// Initial Render
+showMenu();
+
+</script>
+</body>
+</html>
+
